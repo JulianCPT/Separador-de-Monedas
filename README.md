@@ -182,7 +182,7 @@ Separador-de-Monedas-Diseno-Mecanico/
 
 | Parte | Hardware |
 | --- | --- |
-| Conteo por canal | Un **CNY70** en cada caída del canal, conectado a pines **ADC1** de la ESP32 (los ADC2 no funcionan bien con el Wi-Fi activo) |
+| Conteo por canal | Un **CNY70** en cada caída del canal, conectado a pines **ADC1** de la ESP32 (los ADC2 no funcionan bien con el Wi-Fi activo); ver [Configuración del CNY70](#-configuraci%C3%B3n-del-cny70) |
 | Comunicación | Wi-Fi (HTTP con JSON) hacia el dashboard |
 
 **Formato mínimo del JSON que publica la ESP32** (cantidad contada por cada denominación):
@@ -194,6 +194,118 @@ Separador-de-Monedas-Diseno-Mecanico/
 ```
 
 El dashboard usa valores por defecto para el resto de campos, así que con `cuentas` ya muestra el conteo, el valor total y el peso estimado.
+
+### 🔦 Configuración del CNY70
+
+El CNY70 tiene **4 patas**: 2 del LED infrarrojo y 2 del fototransistor, que son dos circuitos separados dentro del mismo encapsulado. Se alimenta a 3,3 V desde la ESP32.
+
+| Pata | Nombre | Se conecta a |
+| --- | --- | --- |
+| 4 | **Ánodo** (LED) | 3V3 a través de una resistencia de ~150 Ω |
+| 3 | **Cátodo** (LED) | GND |
+| 1 | **Colector** (fototransistor) | 3V3 a través de una resistencia de 10 kΩ **y** al GPIO de la ESP32 |
+| 2 | **Emisor** (fototransistor) | GND |
+
+> ⚠️ El orden de las patas puede variar según el fabricante: confírmalo con el datasheet. Con un multímetro en modo diodo, el par de patas que marca ~1 V es el LED (punta roja en el ánodo).
+
+```
+3V3 ──[R1 150 Ω]──► Ánodo (LED)
+                    Cátodo ──► GND
+
+3V3 ──[R2 10 kΩ]──┬──► Colector (fototransistor)
+                  └──► GPIO de la ESP32 (lectura)
+                    Emisor ──► GND
+```
+
+| Elemento | Valor | Para qué |
+| --- | --- | --- |
+| **R1** (LED) | ~150 Ω (220 Ω si se alimenta a 5 V) | Limita la corriente del LED |
+| **R2** (fototransistor) | 10 kΩ para empezar (probar entre 4,7 kΩ y 47 kΩ) | Convierte la corriente en voltaje |
+
+- **Sin moneda:** casi no hay reflexión y el GPIO lee un voltaje **alto** (cerca de 3,3 V).
+- **Con moneda:** el fototransistor conduce y el voltaje **baja**. Cada bajada es un pulso, es decir, una moneda.
+
+**Pines de la ESP32:** usa pines **ADC1** (GPIO 32, 33, 34, 35 y 36) porque con el Wi-Fi activo los ADC2 no funcionan bien. Los GPIO 34, 35 y 36 son solo entrada, y eso sirve aquí.
+
+**Montaje mecánico:**
+
+- Pon el sensor **mirando el canal de lado**, a **2 a 4 mm** del recorrido de la moneda.
+- La moneda debe **pasar frente a la cara del sensor**.
+- Pon un fondo **negro mate** enfrente para que el canal no refleje y falsee la lectura.
+- Evita la luz directa del sol o de lámparas, porque tienen infrarrojo y saturan el sensor.
+- Si es una caída libre, la moneda pasa muy rápido: lee el sensor a alta frecuencia.
+
+<details>
+<summary><b>Ver código base de la ESP32 (conteo + JSON en <code>/datos</code>)</b></summary>
+
+```cpp
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* SSID = "TU_WIFI";
+const char* PASS = "TU_CLAVE";
+
+const int PINES[5] = {32, 33, 34, 35, 36};      // $50, $100, $200, $500, $1000
+const int DENOM[5] = {50, 100, 200, 500, 1000};
+const int UMBRAL_BAJO = 1500;   // por debajo = moneda presente (ajustar)
+const int UMBRAL_ALTO = 2500;   // por encima = sensor libre (histéresis)
+const unsigned long REARME_MS = 40; // evita contar la misma moneda dos veces
+
+int cuentas[5] = {0};
+bool presente[5] = {false};
+unsigned long ultimo[5] = {0};
+
+WebServer server(80);
+
+void enviarDatos() {
+  String j = "{\"cuentas\":{";
+  for (int i = 0; i < 5; i++) {
+    j += "\"" + String(DENOM[i]) + "\":" + String(cuentas[i]);
+    if (i < 4) j += ",";
+  }
+  j += "}}";
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", j);
+}
+
+void setup() {
+  Serial.begin(115200);
+  analogSetAttenuation(ADC_11db);   // rango completo ~0 a 3,3 V
+  WiFi.begin(SSID, PASS);
+  while (WiFi.status() != WL_CONNECTED) delay(300);
+  Serial.println(WiFi.localIP());   // esta IP va en el dashboard
+  server.on("/datos", enviarDatos);
+  server.begin();
+}
+
+void loop() {
+  for (int i = 0; i < 5; i++) {
+    int v = analogRead(PINES[i]);
+    if (!presente[i] && v < UMBRAL_BAJO && millis() - ultimo[i] > REARME_MS) {
+      presente[i] = true;
+      cuentas[i]++;
+      ultimo[i] = millis();
+    } else if (presente[i] && v > UMBRAL_ALTO) {
+      presente[i] = false;
+    }
+  }
+  server.handleClient();
+}
+```
+
+</details>
+
+- **Histéresis** (dos umbrales): evita contar una moneda varias veces por ruido.
+- **`REARME_MS`:** tiempo mínimo entre conteos del mismo sensor.
+- **`/datos`:** devuelve el JSON mínimo. En el dashboard elige **ESP32 (URL)** y escribe `http://IP-DE-LA-ESP32/datos`.
+
+**Calibración:**
+
+1. Abre el Monitor Serial y muestra `analogRead(pin)` para ver los valores.
+2. Anota el valor **sin moneda** (alto) y el valor **con moneda pasando** (bajo).
+3. Pon `UMBRAL_BAJO` y `UMBRAL_ALTO` entre esos dos valores, con margen.
+4. Pasa monedas de cada denominación y verifica que cuente 1 por moneda.
+5. Si no detecta, acerca el sensor o sube R2. Si siempre lee bajo, hay luz ambiente o el fondo refleja: baja R2 o tapa el sensor.
 
 ![](https://capsule-render.vercel.app/api?type=rect&color=0:0F2027,100:203A43&height=3&section=header)
 
