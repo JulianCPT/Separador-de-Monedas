@@ -54,6 +54,7 @@ Este repositorio reúne **solo los avances del diseño mecánico del separador d
 - [🧠 Conceptos clave](#-conceptos-clave)
 - [🧰 Solución de problemas](#-soluci%C3%B3n-de-problemas)
 - [🚧 Limitaciones y pendientes](#-limitaciones-y-pendientes)
+- [📚 Referencia](#-referencia)
 - [👤 Autor](#-autor)
 
 ![](https://capsule-render.vercel.app/api?type=rect&color=0:0F2027,100:203A43&height=3&section=header)
@@ -106,7 +107,19 @@ El **peso** que muestra el dashboard es **estimado**: cantidad de cada denominac
 Moneda → Rampa → Canal → Caída → CNY70 → ESP32 → Dashboard (Streamlit)
 ```
 
-> 📝 *(Completar con el detalle de tu mecanismo: inclinación de la rampa, material, forma de la tolva, etc.)*
+### 🧪 Prototipo en cartón
+
+El primer prototipo está basado en la referencia de una **máquina clasificadora de monedas hecha de cartón** (ver [Referencia](#-referencia)). En este proyecto cada ranura se dimensiona con el **diámetro real de la moneda** que debe dejar pasar.
+
+| Parámetro | Criterio de diseño |
+| --- | --- |
+| Orden de las ranuras | De menor a mayor diámetro, en el sentido de bajada de la rampa |
+| Ancho de cada ranura | Diámetro de la moneda + holgura (ver tablas de dimensiones) |
+| Última salida | Canal final para la moneda de mayor diámetro ($1.000) |
+| Inclinación de la rampa | *(por definir con pruebas)* |
+| Material | Cartón en el prototipo; luego impresión 3D o corte láser *(por definir)* |
+
+> 📝 *(Completar con las medidas reales de tu prototipo: largo de la rampa, posición de cada ranura y forma de la tolva.)*
 
 ![](https://capsule-render.vercel.app/api?type=rect&color=0:0F2027,100:203A43&height=3&section=header)
 
@@ -407,6 +420,12 @@ Permiten que una parte de la página se actualice sola cada cierto tiempo sin vo
 - El peso de la moneda de **$100** es provisional.
 - El **peso** del dashboard es estimado (no hay celda de carga).
 - El firmware de la ESP32 y la instalación final de los CNY70 siguen en desarrollo.
+
+![](https://capsule-render.vercel.app/api?type=rect&color=0:0F2027,100:203A43&height=3&section=header)
+
+## 📚 Referencia
+
+- 🎬 [How to Make Coin Sorting Machine from Cardboard](https://www.youtube.com/watch?v=ykvUE8Ad8Ls&t=28s) — referencia del principio de funcionamiento: una rampa inclinada con ranuras de ancho creciente por las que cae cada moneda. En este proyecto el diseño se adapta a los **diámetros reales** de las monedas colombianas (serie nueva y antigua) y se le agregan sensores **CNY70**, la **ESP32** y el **dashboard**.
 
 ![](https://capsule-render.vercel.app/api?type=rect&color=0:0F2027,100:203A43&height=3&section=header)
 
